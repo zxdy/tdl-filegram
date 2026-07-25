@@ -24,6 +24,7 @@ ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=go-builder /app/tdl-filegram .
 COPY --from=web-builder /app/web/dist /usr/share/nginx/html
+RUN mkdir -p /app/config
 
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/entrypoint.sh /app/entrypoint.sh
@@ -34,13 +35,13 @@ ENV DB_PATH=/data/tdl-filegram.db \
     DOWNLOAD_DIR=/downloads \
     DOWNLOAD_THREADS=4 \
     DOWNLOAD_LIMIT=2 \
-    TG_APP_ID=你的appid\
-    TG_APP_HASH=你的appid \
+    TG_APP_ID="" \
+    TG_APP_HASH="" \
     TG_DATA_DIR=/data/.tdl \
     TG_NAMESPACE=default \
     TG_POOL_SIZE=8 \
     TG_RECONNECT_TIMEOUT=5m \
-    TG_PROXY=你的本地代理
+    TG_PROXY=""
 # 8744 = 前端（nginx），8743 = 后端（Go API）
 EXPOSE 8744 8743
 VOLUME ["/data", "/downloads"]

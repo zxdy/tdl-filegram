@@ -31,5 +31,7 @@ services:
       BOT_TOKEN: ""
       BOT_ALLOWED_USER_IDS: ""
     volumes:
+      # 配置文件只读挂载：程序会读取 /app/config/config.yaml，环境变量仍可覆盖其中的值。
+      - ./config/config.yaml:/app/config/config.yaml:ro
       - ./data:/data                  # SQLite + session 持久化
       - ./downloads:/downloads        # 下载内容输出
