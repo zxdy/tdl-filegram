@@ -31,6 +31,17 @@ type DownloadLogic struct {
 	cancels     map[string]context.CancelFunc
 	cancelFlags map[string]bool          // true=取消（不可恢复），false/缺省=暂停
 	dones       map[string]chan struct{} // process goroutine 退出信号
+	watchers    map[string][]func(DownloadEvent)
+}
+
+// DownloadEvent 是下载状态变化的轻量通知，用于 Bot 等外部入口反馈进度。
+type DownloadEvent struct {
+	JobID      string
+	Status     string
+	FileName   string
+	Downloaded int64
+	Total      int64
+	Error      string
 }
 
 // liveProgress 下载过程中的实时进度（内存）
@@ -52,6 +63,25 @@ func NewDownloadLogic(jobModel *model.JobModel, engine *telegram.Engine, downloa
 		cancels:     make(map[string]context.CancelFunc),
 		cancelFlags: make(map[string]bool),
 		dones:       make(map[string]chan struct{}),
+		watchers:    make(map[string][]func(DownloadEvent)),
+	}
+}
+
+// Watch 订阅单个任务的进度；返回函数可取消订阅。
+func (l *DownloadLogic) Watch(jobID string, fn func(DownloadEvent)) func() {
+	l.mu.Lock()
+	l.watchers[jobID] = append(l.watchers[jobID], fn)
+	l.mu.Unlock()
+	return func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		listeners := l.watchers[jobID]
+		for i, listener := range listeners {
+			if fmt.Sprintf("%p", listener) == fmt.Sprintf("%p", fn) {
+				l.watchers[jobID] = append(listeners[:i], listeners[i+1:]...)
+				break
+			}
+		}
 	}
 }
 
@@ -66,6 +96,7 @@ func (l *DownloadLogic) Create(ctx context.Context, r req.CreateDownloadReq) (*r
 		filename = telegram.SanitizeName(r.Filename)
 	}
 	if filename == "" {
+		l.log.Debug("resolving download media", zap.String("url", r.URL))
 		info, err := l.engine.ResolveMedia(ctx, r.URL)
 		if err != nil {
 			return nil, err
@@ -88,6 +119,19 @@ func (l *DownloadLogic) Create(ctx context.Context, r req.CreateDownloadReq) (*r
 	}
 	go l.process(job)
 	return &res.CreateDownloadRes{JobID: job.ID}, nil
+}
+
+// CreateBatch 从公开聊天消息链接批量创建下载任务。
+func (l *DownloadLogic) CreateBatch(ctx context.Context, urls []string) ([]*res.CreateDownloadRes, error) {
+	result := make([]*res.CreateDownloadRes, 0, len(urls))
+	for _, url := range urls {
+		item, err := l.Create(ctx, req.CreateDownloadReq{URL: url})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, nil
 }
 
 // Preview 解析消息链接，返回媒体文件名和大小（用于下载前预览）
@@ -132,6 +176,8 @@ func (l *DownloadLogic) process(job *model.Job) {
 
 	job.Status = enum.JobStatusDownloading
 	_ = l.jobModel.Save(context.Background(), job)
+	l.log.Info("download started", zap.String("job_id", job.ID), zap.String("url", job.URL), zap.String("file", job.FileName))
+	l.emit(DownloadEvent{JobID: job.ID, Status: job.Status, FileName: job.FileName})
 
 	dlCtx, cancel := context.WithCancel(runCtx)
 	l.mu.Lock()
@@ -188,6 +234,8 @@ func (l *DownloadLogic) process(job *model.Job) {
 	}
 	_ = l.jobModel.Save(context.Background(), job)
 	l.removeProgress(job.ID)
+	l.emit(DownloadEvent{JobID: job.ID, Status: job.Status, FileName: job.FileName, Downloaded: job.DownloadedBytes, Total: job.FileSize})
+	l.clearWatchers(job.ID)
 	l.log.Info("download success", zap.String("job_id", job.ID), zap.String("file", job.FileName))
 }
 
@@ -271,6 +319,8 @@ func (l *DownloadLogic) failJob(job *model.Job, errMsg string) {
 	job.Error = errMsg
 	_ = l.jobModel.Save(context.Background(), job)
 	l.removeProgress(job.ID)
+	l.emit(DownloadEvent{JobID: job.ID, Status: job.Status, FileName: job.FileName, Error: errMsg})
+	l.clearWatchers(job.ID)
 	l.log.Error("download failed", zap.String("job_id", job.ID), zap.String("error", errMsg))
 }
 
@@ -290,9 +340,29 @@ func (l *DownloadLogic) getProgress(id string) *liveProgress {
 
 func (l *DownloadLogic) updateProgress(id string, downloaded int64) {
 	l.mu.Lock()
+	var event DownloadEvent
 	if p, ok := l.progress[id]; ok {
 		p.downloaded = downloaded
+		event = DownloadEvent{JobID: id, Status: enum.JobStatusDownloading, FileName: p.fileName, Downloaded: downloaded, Total: p.total}
 	}
+	l.mu.Unlock()
+	if event.Total > 0 {
+		l.emit(event)
+	}
+}
+
+func (l *DownloadLogic) emit(event DownloadEvent) {
+	l.mu.RLock()
+	listeners := append([]func(DownloadEvent){}, l.watchers[event.JobID]...)
+	l.mu.RUnlock()
+	for _, listener := range listeners {
+		listener(event)
+	}
+}
+
+func (l *DownloadLogic) clearWatchers(jobID string) {
+	l.mu.Lock()
+	delete(l.watchers, jobID)
 	l.mu.Unlock()
 }
 

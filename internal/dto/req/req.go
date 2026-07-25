@@ -11,6 +11,11 @@ type PreviewDownloadReq struct {
 	URL string `json:"url" binding:"required"`
 }
 
+// BatchCreateDownloadReq 从聊天消息中批量创建下载任务。
+type BatchCreateDownloadReq struct {
+	URLs []string `json:"urls" binding:"required,min=1,max=100"`
+}
+
 // Submit2FAReq 提交两步验证密码
 type Submit2FAReq struct {
 	Password string `json:"password" binding:"required"`

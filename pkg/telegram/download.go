@@ -3,8 +3,10 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -115,11 +117,11 @@ func loadResume(path string, parts int) *resumeState {
 
 // resolveMedia 解析 t.me 链接对应的可下载媒体，用于 file_reference 过期后的刷新
 func (e *Engine) resolveMedia(ctx context.Context, url string) (*tmedia.Media, error) {
-	peer, msgID, err := tutil.ParseMessageLink(ctx, e.manager, url)
+	peer, msgID, err := e.parseMessageLink(ctx, url)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse message link")
 	}
-	msg, err := tutil.GetSingleMessage(ctx, e.pool.Default(ctx), peer.InputPeer(), msgID)
+	msg, err := tutil.GetSingleMessage(ctx, e.pool.Default(ctx), peer, msgID)
 	if err != nil {
 		return nil, errors.Wrap(err, "get message")
 	}
@@ -139,11 +141,11 @@ type MediaInfo struct {
 
 // ResolveMedia 解析消息链接对应的媒体信息（用于下载前预览文件名和大小）
 func (e *Engine) ResolveMedia(ctx context.Context, url string) (*MediaInfo, error) {
-	peer, msgID, err := tutil.ParseMessageLink(ctx, e.manager, url)
+	peer, msgID, err := e.parseMessageLink(ctx, url)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse message link")
 	}
-	msg, err := tutil.GetSingleMessage(ctx, e.pool.Default(ctx), peer.InputPeer(), msgID)
+	msg, err := tutil.GetSingleMessage(ctx, e.pool.Default(ctx), peer, msgID)
 	if err != nil {
 		return nil, errors.Wrap(err, "get message")
 	}
@@ -163,11 +165,11 @@ func (e *Engine) ResolveMedia(ctx context.Context, url string) (*MediaInfo, erro
 // 支持断点续传：已下载的分片不会重复下载，通过 .resume 元数据文件跟踪进度。
 func (e *Engine) DownloadMedia(ctx context.Context, url, dir, filename string, rep ProgressReporter) error {
 	// 初始解析媒体（保留 msg 用于 mime 与兜底文件名）
-	peer, msgID, err := tutil.ParseMessageLink(ctx, e.manager, url)
+	peer, msgID, err := e.parseMessageLink(ctx, url)
 	if err != nil {
 		return errors.Wrap(err, "parse message link")
 	}
-	msg, err := tutil.GetSingleMessage(ctx, e.pool.Default(ctx), peer.InputPeer(), msgID)
+	msg, err := tutil.GetSingleMessage(ctx, e.pool.Default(ctx), peer, msgID)
 	if err != nil {
 		return errors.Wrap(err, "get message")
 	}
@@ -182,7 +184,7 @@ func (e *Engine) DownloadMedia(ctx context.Context, url, dir, filename string, r
 		name = SanitizeName(filename)
 	}
 	if name == "" {
-		name = fmt.Sprintf("%d_%d", tutil.GetInputPeerID(peer.InputPeer()), msgID)
+		name = fmt.Sprintf("%d_%d", tutil.GetInputPeerID(peer), msgID)
 	}
 	path := filepath.Join(dir, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -309,6 +311,37 @@ func (e *Engine) DownloadMedia(ctx context.Context, url, dir, filename string, r
 	_ = os.Remove(metaPath)
 	rep.OnDone(path, nil)
 	return nil
+}
+
+// parseMessageLink 解析公开链接，以及 Bot 转发时构造的私有频道 /c/ 链接。
+// 后者没有用户名，TDL 会从当前登录账号的对话缓存中取得频道 access hash。
+func (e *Engine) parseMessageLink(ctx context.Context, rawURL string) (tg.InputPeerClass, int, error) {
+	peer, msgID, err := tutil.ParseMessageLink(ctx, e.manager, rawURL)
+	if err == nil {
+		return peer.InputPeer(), msgID, nil
+	}
+
+	u, parseErr := url.Parse(rawURL)
+	if parseErr != nil {
+		return nil, 0, err
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) != 3 || parts[0] != "c" {
+		return nil, 0, err
+	}
+	channelID, idErr := strconv.ParseInt(parts[1], 10, 64)
+	if idErr != nil {
+		return nil, 0, err
+	}
+	messageID, idErr := strconv.Atoi(parts[2])
+	if idErr != nil {
+		return nil, 0, err
+	}
+	input, _, resolveErr := e.inputPeer(ctx, "频道", channelID)
+	if resolveErr != nil {
+		return nil, 0, resolveErr
+	}
+	return input, messageID, nil
 }
 
 // downloadChunk 下载指定偏移量的文件块，自动处理 FloodWait 和超时重试

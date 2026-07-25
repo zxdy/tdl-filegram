@@ -18,6 +18,7 @@ func Register(r *gin.Engine, log *zap.Logger,
 	loginCtl *controller.LoginController,
 	downloadCtl *controller.DownloadController,
 	jobCtl *controller.JobController,
+	chatCtl *controller.ChatController,
 ) {
 	r.Use(middleware.Recovery(log), middleware.Trace(), middleware.Cors())
 
@@ -33,8 +34,14 @@ func Register(r *gin.Engine, log *zap.Logger,
 		api.POST("/login/qr/start", loginCtl.StartQR)
 		api.POST("/login/qr/2fa", loginCtl.Submit2FA)
 
+		// 聊天列表
+		api.GET("/chats", chatCtl.List)
+		api.GET("/chats/:type/:id/messages", chatCtl.Messages)
+		api.GET("/chats/:type/:id/messages/:messageID/thumbnail", chatCtl.Thumbnail)
+
 		// 下载
 		api.POST("/download", downloadCtl.Create)
+		api.POST("/download/batch", downloadCtl.BatchCreate)
 		api.POST("/download/preview", downloadCtl.Preview)
 
 		// 任务

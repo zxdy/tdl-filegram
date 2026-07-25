@@ -220,6 +220,7 @@ telegram:
 | 环境变量 | 配置项 | Docker 默认值 |
 | --- | --- | --- |
 | `APP_PORT` | `app.port` | `8743` |
+| `APP_HOST` | `app.host` | `0.0.0.0` |
 | `DB_PATH` | `database.path` | `/data/tdl-filegram.db` |
 | `DOWNLOAD_DIR` | `download.dir` | `/downloads` |
 | `DOWNLOAD_THREADS` | `download.threads` | `4` |
@@ -231,6 +232,8 @@ telegram:
 | `TG_POOL_SIZE` | `telegram.pool_size` | `8` |
 | `TG_RECONNECT_TIMEOUT` | `telegram.reconnect_timeout` | `5m` |
 | `TG_PROXY` | `telegram.proxy` | 空（不使用代理） |
+| `BOT_TOKEN` | `bot.token` | 空（不启用 Bot） |
+| `BOT_ALLOWED_USER_IDS` | `bot.allowed_user_ids` | 空（必须配置，逗号分隔） |
 
 </details>
 

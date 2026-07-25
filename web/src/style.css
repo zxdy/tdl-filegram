@@ -41,3 +41,189 @@ body {
 .mt-16 {
   margin-top: 16px;
 }
+.job-section-title.ant-divider {
+  margin: 8px 0 12px;
+  color: #666;
+  font-size: 13px;
+}
+.media-placeholder {
+  width: 96px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #e6f4ff;
+  color: #1677ff;
+  font-size: 12px;
+}
+
+/* 桌面浏览器可通过右上角开关强制预览手机布局。 */
+.mobile-layout {
+  max-width: 640px;
+  padding: 12px;
+}
+
+.mobile-layout .header {
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.mobile-layout .header h1 {
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.mobile-layout .download-input .ant-input {
+  width: calc(100% - 88px) !important;
+}
+
+.mobile-layout .download-input .ant-btn {
+  width: 88px !important;
+}
+
+.mobile-layout .ant-card-head,
+.mobile-layout .ant-card-body {
+  padding: 10px 12px;
+}
+
+.mobile-layout .ant-card-head-title {
+  white-space: normal;
+}
+
+.mobile-layout .ant-card-extra .ant-space {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.mobile-layout .ant-card-extra .ant-input {
+  width: min(180px, 42vw) !important;
+}
+
+.mobile-layout .ant-list-item {
+  align-items: flex-start;
+}
+
+.mobile-layout .ant-list-item-meta {
+  min-width: 0;
+}
+
+.mobile-layout .ant-list-item-meta-title,
+.mobile-layout .ant-list-item-meta-description {
+  overflow-wrap: anywhere;
+}
+
+.mobile-layout .media-placeholder,
+.mobile-layout .ant-list-item-meta-avatar .ant-image,
+.mobile-layout .ant-list-item-meta-avatar .ant-image img {
+  width: 64px !important;
+  height: 52px !important;
+}
+
+@media (max-width: 640px) {
+  .page {
+    max-width: none;
+    padding: 12px;
+  }
+
+  .header {
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+  }
+
+  .header h1 {
+    font-size: 17px;
+    line-height: 1.4;
+  }
+
+  .login-wrap {
+    padding: 24px 12px;
+  }
+
+  .login-wrap .ant-card {
+    width: 100% !important;
+    max-width: 380px;
+  }
+
+  .download-input .ant-input {
+    width: calc(100% - 88px) !important;
+  }
+
+  .download-input .ant-btn {
+    width: 88px !important;
+  }
+
+  .ant-card-head {
+    min-height: auto;
+    padding: 10px 12px;
+  }
+
+  .ant-card-head-title {
+    padding: 8px 0;
+    white-space: normal;
+  }
+
+  .ant-card-extra {
+    max-width: 100%;
+    margin-left: 8px;
+    padding: 8px 0;
+  }
+
+  .ant-card-extra .ant-space {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .ant-card-extra .ant-input {
+    width: min(180px, 42vw) !important;
+  }
+
+  .ant-card-body {
+    padding: 12px;
+  }
+
+  .ant-tabs-nav {
+    margin-bottom: 12px;
+  }
+
+  .ant-list-item {
+    align-items: flex-start;
+    padding: 12px 0;
+  }
+
+  .ant-list-item-meta {
+    min-width: 0;
+  }
+
+  .ant-list-item-meta-title,
+  .ant-list-item-meta-description {
+    overflow-wrap: anywhere;
+  }
+
+  .ant-list-item-action {
+    margin-left: 8px;
+    white-space: nowrap;
+  }
+
+  .ant-list-item-action > li {
+    padding: 0;
+  }
+
+  .media-placeholder,
+  .ant-list-item-meta-avatar .ant-image,
+  .ant-list-item-meta-avatar .ant-image img {
+    width: 64px !important;
+    height: 52px !important;
+  }
+
+  .ant-list-item-meta-avatar {
+    margin-right: 10px;
+  }
+
+  .ant-modal {
+    max-width: calc(100vw - 24px);
+    margin: 0 auto;
+  }
+}

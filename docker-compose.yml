@@ -27,6 +27,9 @@ services:
       TG_POOL_SIZE: "8"               # DC 连接池大小
       TG_RECONNECT_TIMEOUT: 5m        # 重连退避超时
       TG_PROXY: ""                    # 代理地址，如 http://127.0.0.1:7890
+      # ── 可选：Bot 入口（逗号分隔的 Telegram 用户 ID 白名单）──
+      BOT_TOKEN: ""
+      BOT_ALLOWED_USER_IDS: ""
     volumes:
       - ./data:/data                  # SQLite + session 持久化
       - ./downloads:/downloads        # 下载内容输出

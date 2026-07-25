@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -15,10 +16,12 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	Download DownloadConfig `yaml:"download"`
 	Telegram TelegramConfig `yaml:"telegram"`
+	Bot      BotConfig      `yaml:"bot"`
 }
 
 type AppConfig struct {
 	Name string `yaml:"name"`
+	Host string `yaml:"host"`
 	Port string `yaml:"port"`
 	Env  string `yaml:"env"`
 }
@@ -48,6 +51,12 @@ type TelegramConfig struct {
 	Proxy            string `yaml:"proxy"`
 }
 
+// BotConfig 是 Telegram Bot API 入口配置。允许用户为空时 Bot 不启动。
+type BotConfig struct {
+	Token          string  `yaml:"token"`
+	AllowedUserIDs []int64 `yaml:"allowed_user_ids"`
+}
+
 // LoadConfig 加载配置文件（文件缺失时用默认值），再用环境变量覆盖。
 // 支持的环境变量见 applyEnvOverrides。
 func LoadConfig(path string) (*Config, error) {
@@ -63,6 +72,9 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 func (c *Config) applyDefaults() {
+	if c.App.Host == "" {
+		c.App.Host = "0.0.0.0"
+	}
 	if c.App.Port == "" {
 		c.App.Port = "8743"
 	}
@@ -104,6 +116,9 @@ func (c *Config) applyDefaults() {
 // applyEnvOverrides 用环境变量覆盖配置，空字符串/解析失败时保留原值。
 // Docker 运行时通过这些环境变量配置各选项。
 func (c *Config) applyEnvOverrides() {
+	if v := os.Getenv("APP_HOST"); v != "" {
+		c.App.Host = v
+	}
 	if v := os.Getenv("APP_PORT"); v != "" {
 		c.App.Port = v
 	}
@@ -147,6 +162,18 @@ func (c *Config) applyEnvOverrides() {
 	}
 	if v := os.Getenv("TG_PROXY"); v != "" {
 		c.Telegram.Proxy = v
+	}
+	if v := os.Getenv("BOT_TOKEN"); v != "" {
+		c.Bot.Token = v
+	}
+	if v := os.Getenv("BOT_ALLOWED_USER_IDS"); v != "" {
+		ids := make([]int64, 0)
+		for _, part := range strings.Split(v, ",") {
+			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil {
+				ids = append(ids, id)
+			}
+		}
+		c.Bot.AllowedUserIDs = ids
 	}
 }
 

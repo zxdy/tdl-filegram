@@ -11,6 +11,27 @@ type LoginStatusRes struct {
 	Error         string `json:"error,omitempty"`
 }
 
+// ChatRes 聊天列表项，不包含消息内容。
+type ChatRes struct {
+	ID          int64  `json:"id"`
+	Type        string `json:"type"`
+	Title       string `json:"title"`
+	Username    string `json:"username,omitempty"`
+	UnreadCount int    `json:"unread_count"`
+}
+
+type ChatMessageRes struct {
+	ID         int       `json:"id"`
+	Title      string    `json:"title"`
+	Date       time.Time `json:"date"`
+	MediaType  string    `json:"media_type,omitempty"`
+	Size       int64     `json:"size"`
+	MIME       string    `json:"mime,omitempty"`
+	SourceURL  string    `json:"source_url,omitempty"`
+	HasMedia   bool      `json:"has_media"`
+	HasPreview bool      `json:"has_preview"`
+}
+
 // CreateDownloadRes 创建下载任务响应
 type CreateDownloadRes struct {
 	JobID string `json:"job_id"`

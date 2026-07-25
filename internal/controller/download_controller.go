@@ -48,3 +48,18 @@ func (ctl *DownloadController) Preview(c *gin.Context) {
 	}
 	response.Success(c, res)
 }
+
+// BatchCreate 批量创建公开聊天消息的下载任务。
+func (ctl *DownloadController) BatchCreate(c *gin.Context) {
+	var r req.BatchCreateDownloadReq
+	if err := c.ShouldBindJSON(&r); err != nil {
+		response.Fail(c, enum.ErrInvalidParam.Code, enum.ErrInvalidParam.Msg, http.StatusBadRequest)
+		return
+	}
+	res, err := ctl.downloadLogic.CreateBatch(c.Request.Context(), r.URLs)
+	if err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, res)
+}

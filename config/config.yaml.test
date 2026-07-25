@@ -1,6 +1,7 @@
 # tdl-filegram 配置文件
 app:
   name: tdl-filegram
+  host: "0.0.0.0"
   port: "8743"
   env: debug  # debug / release
 
@@ -25,3 +26,8 @@ telegram:
   pool_size: 8          # DC 连接池大小
   reconnect_timeout: 5m # 重连退避超时
   proxy: "http://127.0.0.1:7890"             # 代理地址，支持 http:// https:// socks5://，如 http://127.0.0.1:7890
+
+# 可选：Bot 收取 t.me 链接并反馈下载进度。allowed_user_ids 留空允许所有用户。
+bot:
+  token: ""
+  allowed_user_ids: []

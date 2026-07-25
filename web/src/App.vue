@@ -7,6 +7,7 @@ import http from './api'
 // 登录状态
 const authenticated = ref(false)
 const ready = ref(false)
+const mobileLayout = ref(sessionStorage.getItem('tdl-filegram:mobile-layout') === 'true')
 const loginStatus = ref('')
 const qrUrl = ref('')
 const loginError = ref('')
@@ -21,6 +22,57 @@ const submitting2FA = ref(false)
 const url = ref('')
 const submitting = ref(false)
 const jobs = ref([])
+
+// 聊天列表
+const activeTab = ref('downloads')
+const chats = ref([])
+const chatsLoading = ref(false)
+const chatSearch = ref('')
+const selectedChat = ref(null)
+const chatMessages = ref([])
+const messagesLoading = ref(false)
+const selectedMessageIDs = ref([])
+const batchDownloading = ref(false)
+const chatCacheTTL = 20 * 60 * 1000
+const messageCacheTTL = 20 * 60 * 1000
+
+function readCache(key, ttl) {
+  try {
+    const entry = JSON.parse(sessionStorage.getItem(key) || 'null')
+    if (entry && Date.now() - entry.savedAt < ttl) return entry.value
+  } catch (_) {
+    // 损坏或不可用的缓存直接忽略。
+  }
+  return null
+}
+
+function writeCache(key, value) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), value }))
+  } catch (_) {
+    // 私密浏览或存储空间不足时仍可正常请求接口。
+  }
+}
+
+function chatCacheKey(chat) {
+  return 'tdl-filegram:messages:' + chat.type + ':' + chat.id
+}
+const filteredChats = computed(() => {
+  const query = chatSearch.value.trim().toLowerCase()
+  if (!query) return chats.value
+  return chats.value.filter((chat) =>
+    [chat.title, chat.username, chat.type, String(chat.id)].some((value) =>
+      String(value || '').toLowerCase().includes(query),
+    ),
+  )
+})
+const downloadableMessages = computed(() => chatMessages.value.filter((item) => item.source_url))
+const unfinishedJobs = computed(() => jobs.value.filter((item) => item.status !== 'success'))
+const completedJobs = computed(() => jobs.value.filter((item) => item.status === 'success'))
+const jobSections = computed(() => [
+  { key: 'unfinished', title: '未完成', items: unfinishedJobs.value },
+  { key: 'completed', title: '已完成', items: completedJobs.value },
+].filter((section) => section.items.length > 0))
 
 // 下载预览弹窗
 const downloadModalVisible = ref(false)
@@ -67,6 +119,10 @@ watch(authenticated, (val) => {
   } else {
     stopJobPoll()
   }
+})
+
+watch(activeTab, (tab) => {
+  if (tab === 'chats' && chats.value.length === 0) loadChats()
 })
 
 async function checkStatus() {
@@ -186,6 +242,115 @@ async function loadJobs() {
   } catch (e) {
     /* ignore */
   }
+}
+
+function toggleMobileLayout() {
+  mobileLayout.value = !mobileLayout.value
+  sessionStorage.setItem('tdl-filegram:mobile-layout', String(mobileLayout.value))
+}
+
+async function loadChats(force = false) {
+  if (!force) {
+    const cached = readCache('tdl-filegram:chats', chatCacheTTL)
+    if (cached) {
+      chats.value = cached
+      return
+    }
+  }
+  chatsLoading.value = true
+  try {
+    chats.value = await http.get('/api/chats')
+    writeCache('tdl-filegram:chats', chats.value)
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    chatsLoading.value = false
+  }
+}
+
+async function openChat(chat) {
+  selectedChat.value = chat
+  selectedMessageIDs.value = []
+  await loadMessages()
+}
+
+async function loadMessages(force = false) {
+  if (!selectedChat.value) return
+  const cacheKey = chatCacheKey(selectedChat.value)
+  if (!force) {
+    const cached = readCache(cacheKey, messageCacheTTL)
+    if (cached) {
+      chatMessages.value = cached
+      return
+    }
+  }
+  messagesLoading.value = true
+  try {
+    const chat = selectedChat.value
+    chatMessages.value = await http.get(
+      '/api/chats/' + encodeURIComponent(chat.type) + '/' + chat.id + '/messages',
+      { params: { limit: 50 } },
+    )
+    writeCache(cacheKey, chatMessages.value)
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    messagesLoading.value = false
+  }
+}
+
+function closeChat() {
+  selectedChat.value = null
+  chatMessages.value = []
+  selectedMessageIDs.value = []
+}
+
+function thumbnailURL(item) {
+  const chat = selectedChat.value
+  return '/api/chats/' + encodeURIComponent(chat.type) + '/' + chat.id + '/messages/' + item.id + '/thumbnail'
+}
+
+function messageSelected(id) {
+  return selectedMessageIDs.value.includes(id)
+}
+
+function toggleMessage(id, checked) {
+  if (checked) {
+    if (!messageSelected(id)) selectedMessageIDs.value.push(id)
+  } else {
+    selectedMessageIDs.value = selectedMessageIDs.value.filter((item) => item !== id)
+  }
+}
+
+function toggleAllMessages(checked) {
+  selectedMessageIDs.value = checked
+    ? downloadableMessages.value.map((item) => item.id)
+    : []
+}
+
+async function downloadMessages(items) {
+  const urls = items.map((item) => item.source_url).filter(Boolean)
+  if (!urls.length) {
+    message.warning('所选消息没有公开 t.me 链接，暂不支持直接下载')
+    return
+  }
+  batchDownloading.value = true
+  try {
+    await http.post('/api/download/batch', { urls })
+    message.success('已创建 ' + urls.length + ' 个下载任务')
+    selectedMessageIDs.value = []
+    activeTab.value = 'downloads'
+    await loadJobs()
+    startJobPoll()
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    batchDownloading.value = false
+  }
+}
+
+async function downloadSelectedMessages() {
+  await downloadMessages(chatMessages.value.filter((item) => messageSelected(item.id)))
 }
 
 function startJobPoll() {
@@ -372,14 +537,21 @@ function formatEta(seconds) {
   </div>
 
   <!-- 主页 -->
-  <div v-else class="page">
+  <div v-else class="page" :class="{ 'mobile-layout': mobileLayout }">
     <div class="header">
       <h1>tdl-filegram · Telegram 下载</h1>
-      <a-tag color="green">已登录</a-tag>
+      <a-space size="small">
+        <a-button size="small" @click="toggleMobileLayout">
+          {{ mobileLayout ? '桌面布局' : '手机布局' }}
+        </a-button>
+        <a-tag color="green">已登录</a-tag>
+      </a-space>
     </div>
 
-    <a-card title="新建下载" class="mt-16">
-      <a-input-group compact>
+    <a-tabs v-model:activeKey="activeTab" class="mt-16">
+      <a-tab-pane key="downloads" tab="下载任务">
+    <a-card title="新建下载">
+      <a-input-group compact class="download-input">
         <a-input
           v-model:value="url"
           placeholder="粘贴 Telegram 消息链接，如 https://t.me/channel/123"
@@ -408,7 +580,10 @@ function formatEta(seconds) {
         </a-space>
       </template>
       <a-empty v-if="jobs.length === 0" description="暂无任务" />
-      <a-list v-else :data-source="jobs" item-layout="horizontal">
+      <template v-else>
+      <template v-for="section in jobSections" :key="section.key">
+      <a-divider class="job-section-title" orientation="left">{{ section.title }}（{{ section.items.length }}）</a-divider>
+      <a-list :data-source="section.items" item-layout="horizontal">
         <template #renderItem="{ item }">
           <a-list-item>
             <a-list-item-meta>
@@ -499,7 +674,116 @@ function formatEta(seconds) {
           </a-list-item>
         </template>
       </a-list>
+      </template>
+      </template>
     </a-card>
+      </a-tab-pane>
+
+      <a-tab-pane key="chats" tab="聊天列表">
+        <a-card v-if="!selectedChat" title="Telegram 聊天列表">
+          <template #extra>
+            <a-space>
+              <a-input v-model:value="chatSearch" placeholder="搜索名称、用户名或 ID" allow-clear style="width: 220px" />
+              <a-button :loading="chatsLoading" @click="loadChats(true)">刷新</a-button>
+            </a-space>
+          </template>
+          <a-spin :spinning="chatsLoading">
+            <a-empty v-if="filteredChats.length === 0" description="暂无聊天，或没有匹配结果" />
+            <a-list v-else :data-source="filteredChats" item-layout="horizontal">
+              <template #renderItem="{ item }">
+                <a-list-item style="cursor: pointer" @click="openChat(item)">
+                  <a-list-item-meta>
+                    <template #title>
+                      {{ item.title || '未命名聊天' }}
+                      <a-tag style="margin-left: 8px">{{ item.type }}</a-tag>
+                      <a-badge v-if="item.unread_count" :count="item.unread_count" style="margin-left: 8px" />
+                    </template>
+                    <template #description>
+                      <span v-if="item.username">@{{ item.username }} · </span>ID: {{ item.id }}
+                    </template>
+                  </a-list-item-meta>
+                </a-list-item>
+              </template>
+            </a-list>
+          </a-spin>
+        </a-card>
+
+        <a-card v-else :title="selectedChat.title || '聊天消息'">
+          <template #extra>
+            <a-space>
+              <a-button @click="closeChat">返回列表</a-button>
+              <a-button :loading="messagesLoading" @click="loadMessages(true)">刷新</a-button>
+              <a-button
+                type="primary"
+                :disabled="selectedMessageIDs.length === 0"
+                :loading="batchDownloading"
+                @click="downloadSelectedMessages"
+              >
+                下载已选 ({{ selectedMessageIDs.length }})
+              </a-button>
+            </a-space>
+          </template>
+          <a-alert
+            v-if="!selectedChat.username"
+            message="该聊天没有公开用户名：可浏览消息，但目前只有带 t.me 链接的消息可直接创建下载任务。"
+            type="info"
+            show-icon
+            style="margin-bottom: 16px"
+          />
+          <a-spin :spinning="messagesLoading">
+            <a-empty v-if="downloadableMessages.length === 0" description="暂无可下载的公开消息" />
+            <a-list v-else :data-source="downloadableMessages" item-layout="horizontal">
+              <template #header>
+                <a-checkbox
+                  :checked="selectedMessageIDs.length === downloadableMessages.length"
+                  @change="(e) => toggleAllMessages(e.target.checked)"
+                >
+                  全选可下载消息
+                </a-checkbox>
+              </template>
+              <template #renderItem="{ item }">
+                <a-list-item>
+                  <template #actions>
+                    <a-button v-if="item.source_url" type="link" :loading="batchDownloading" @click="downloadMessages([item])">下载</a-button>
+                    <span v-else style="color: #999">无公开链接</span>
+                  </template>
+                  <a-list-item-meta>
+                    <template #avatar>
+                      <a-image
+                        v-if="item.has_preview"
+                        :src="thumbnailURL(item)"
+                        :width="96"
+                        :height="72"
+                        style="object-fit: cover"
+                        :preview="item.media_type === '图片' || item.media_type === '视频'"
+                      />
+                      <div v-else class="media-placeholder">{{ item.media_type || '消息' }}</div>
+                    </template>
+                    <template #title>
+                      <a-checkbox
+                        v-if="item.source_url"
+                        :checked="messageSelected(item.id)"
+                        style="margin-right: 8px"
+                        @change="(e) => toggleMessage(item.id, e.target.checked)"
+                      />
+                      {{ item.title }}
+                    </template>
+                    <template #description>
+                      <a-space size="small" wrap>
+                        <span>{{ new Date(item.date).toLocaleString() }}</span>
+                        <a-tag v-if="item.media_type">{{ item.media_type }}</a-tag>
+                        <span v-if="item.size">{{ formatSize(item.size) }}</span>
+                        <span v-if="item.mime">{{ item.mime }}</span>
+                      </a-space>
+                    </template>
+                  </a-list-item-meta>
+                </a-list-item>
+              </template>
+            </a-list>
+          </a-spin>
+        </a-card>
+      </a-tab-pane>
+    </a-tabs>
   </div>
 
   <!-- 两步验证弹窗 -->
