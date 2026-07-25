@@ -2,6 +2,7 @@
 /tdl-filegram
 /web/dist
 /web/node_modules
+/.tmp-go-build/
 /.trae
 
 # 运行时数据
